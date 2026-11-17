@@ -275,6 +275,8 @@ html,body{height:100%;overflow:hidden;background:#1e130a radial-gradient(ellipse
 #cdl{--cdh:clamp(72px,min(22vh,30vw),190px);position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:calc(16px + env(safe-area-inset-top,0px)) calc(var(--ew,14px) + 16px) calc(16px + env(safe-area-inset-bottom,0px));background:rgba(14,9,6,.97);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .35s ease,visibility 0s .35s;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;outline:none;overflow:hidden}
 #cdl.on{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .35s ease}
 #cdlIn{display:flex;flex-direction:column;align-items:center;gap:calc(14px*var(--u,1));max-width:100%}
+#cdl:not(.on) #cdlIn{transform:translateY(14px) scale(.94);transition:transform .35s ease}   /* keluar: kue mengecil & turun halus bersama fade */
+@media (prefers-reduced-motion:reduce){#cdl:not(.on) #cdlIn{transform:none;transition:none}}
 #cdlCake{width:min(86vw,clamp(260px,42vh,520px))}
 #cdlSvg{display:block;width:100%;height:auto}
 #cdlCandles{position:relative;z-index:1;display:flex;justify-content:center;align-items:flex-end;gap:.06em;font-size:var(--cdh);margin-bottom:-.14em;padding-top:.3em}
@@ -327,6 +329,8 @@ html,body{height:100%;overflow:hidden;background:#1e130a radial-gradient(ellipse
 #endRoll .rl{min-height:1.6em;font:max(15px,calc(15px*var(--u,1)))/1.6 'Special Elite','Courier New',monospace;color:#e0b866}
 #tkOv{position:fixed;inset:0;z-index:10002;background:rgba(14,9,6,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(12px + env(safe-area-inset-top,0px)) 12px calc(12px + env(safe-area-inset-bottom,0px));box-sizing:border-box;overflow:auto;text-align:center}
 #tkOv img{display:block;max-width:100%;max-height:calc(100vh - 150px);max-height:calc(100dvh - 150px);width:auto;height:auto;object-fit:contain;border-radius:6px;box-shadow:0 8px 30px rgba(0,0,0,.6);-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto}
+#tkOv{opacity:0;transition:opacity .35s ease}#tkOv.on{opacity:1}#tkOv img{transform:translateY(14px) scale(.94);transition:transform .35s ease}#tkOv.on img{transform:none}
+@media (prefers-reduced-motion:reduce){#tkOv,#tkOv img{transition:none}#tkOv img{transform:none}}
 #tkOv p{margin:0;max-width:34em;color:#f3e6c4;font:15px/1.4 'Special Elite','Courier New',monospace}
 #tkOv button{min-width:140px;min-height:44px;padding:12px 22px;border-radius:999px;border:1px solid #8a6d3b;background:#2a1d14;color:#f3e6c4;font:15px 'Special Elite','Courier New',monospace;cursor:pointer}
 
@@ -637,7 +641,11 @@ async function type0(el,text,ms=55,tk){el.textContent="";el.classList.add('cur')
 let state='loading',GL_OK=false,rsGL=null,tkReady=null,framed=false,warm=null;
 const sc=$('giftScene'),CAM=$('cam');
 /* transisi ke ruang bioskop */
-function flatten(){CAM.classList.add('flat');const s1=$('s1');sc.style.pointerEvents='none';s1.style.transition='opacity .8s ease';s1.style.opacity=0;setTimeout(()=>s1.style.display='none',900)}
+let flatT=0,DESC0=null,TBQ=false,curtBackFn=null;   /* flatT: timer sembunyikan #s1; DESC0: pose kamera sebelum turun; TBQ: back diantrekan; curtBackFn: fn back tirai->tiket */
+function flatten(){CAM.classList.add('flat');const s1=$('s1');sc.style.pointerEvents='none';s1.style.transition='opacity .8s ease';s1.style.opacity=0;clearTimeout(flatT);flatT=setTimeout(()=>s1.style.display='none',900)}
+/* kebalikan flatten, atomik & tanpa fade: (1) #s1 ditampilkan penuh seketika di atas #cam yang masih 'flat'; (2) pemanggil merender 1 frame 3D di pose akhir; (3) baru 'flat' dicopot & inline style sisa dibersihkan */
+function unflatPre(){clearTimeout(flatT);const s1=$('s1');s1.style.display='';s1.style.transition='none';s1.style.opacity='1';sc.style.pointerEvents='';void s1.offsetWidth}
+function unflatPost(){CAM.classList.remove('flat');const s1=$('s1');s1.style.transition='';s1.style.opacity=''}
 /* kain beludru panggung (dipakai bersama: layar 3D + tirai DOM). o: {pitch,n,xl,xr,top,trim,dark(i)} */
 function fabricCanvas(w,h,o){o=o||{};
  const mk=(a,b)=>{const t=document.createElement('canvas');t.width=a;t.height=b;return t},c=mk(w,h),x=c.getContext('2d');
@@ -775,7 +783,7 @@ const sp=new THREE.SpotLight(0xf0b070,1.15,60,.42,.7,1);sp.position.set(-5,11,7)
 const rim=new THREE.DirectionalLight(0xc47a42,.38);rim.position.set(6,5,-7);scene.add(rim);
 const pl=new THREE.PointLight(0xe8964f,.22,5);pl.position.set(0,1,0);gift.add(pl);
 /* kamera & kontrol */
-let tkCol=false,tkPrev=null,free=false,th=.6,ph=.5,zm=1,tg=null,lidT0=0,sinkT0=0,B=[],pts=new Map(),moved=0,pd=0;
+let tkCol=false,tkPrev=null,free=false,th=.6,ph=.5,zm=1,tg=null,lidT0=0,lidC0=0,GP0=null,sinkT0=0,B=[],pts=new Map(),moved=0,pd=0;
 const D0=()=>Math.max(10.5,5.8/(2*.3153*cam.aspect));
 const LY=.85;
 function place(){const d=D0()/zm,c=Math.cos(ph);cam.position.set(Math.sin(th)*c*d,LY+Math.sin(ph)*d,Math.cos(th)*c*d);cam.lookAt(0,LY,0)}
@@ -791,15 +799,16 @@ function tkHit(dt){if(!tkCol||!TK||!TK.parent)return;TK.updateWorldMatrix(true,f
   const nw=n.applyQuaternion(q);b.p.addScaledVector(nw,r-d);b.v.addScaledVector(nw,Math.max(0,tv.dot(nw))*1+.5)})}
 const _dn=new THREE.Vector3(0,-1,0),_dr=new THREE.Vector3(),_kn=new THREE.Vector3(),_wq=new THREE.Quaternion(),_we=new THREE.Euler();
 const ez=t=>1-Math.pow(1-t,3),bk=t=>1+2.1*Math.pow(t-1,3)+1.1*Math.pow(t-1,2);
-function frame(now){
+function frame(now){frame.on=1;
  for(let i=AN.length-1;i>=0;i--){const a=AN[i],k=FFW?1:Math.min(1,(now-a.t0)/a.dur);a.fn(k);if(k==1){AN.splice(i,1);a.r()}}
  if(tg){const k=FFW?1:Math.min(1,(now-tg.t0)/1100),e=ez(k);th=tg.f[0]+(tg.t[0]-tg.f[0])*e;ph=tg.f[1]+(tg.t[1]-tg.f[1])*e;zm=tg.f[2]+(tg.t[2]-tg.f[2])*e;if(k==1)tg=null}
- if(lidT0)lid.rotation.x=-1.95*bk(FFW?1:Math.min(1,(now-lidT0)/1900));
+ if(lidC0)lid.rotation.x=-1.95*bk(1-(FFW?1:Math.min(1,(now-lidC0)/1900)));   /* tutup kado: kebalikan buka */
+ else if(lidT0)lid.rotation.x=-1.95*bk(FFW?1:Math.min(1,(now-lidT0)/1900));
  {const k=sinkT0?Math.min(1,(now-sinkT0)/1700):0;const fl=RM?.25:1;gift.position.y=Math.sin(now/1100)*.12*fl-16*k*k;gift.rotation.z=Math.sin(now/1700)*.025*fl;gift.rotation.x=Math.sin(now/1500)*.02*fl;gift.visible=k<1}
  const sk=sinkT0?Math.min(1,(now-sinkT0)/1700):0;
  const dt=Math.min(.033,(now-(frame.l||now))/1000);frame.l=now;
  B.forEach(b=>{b.g.visible=now>b.t0;if(!b.g.visible)return;
-  b.s=.05+.95*ez(Math.min(1,(now-b.t0)/700));
+  b.s=(.05+.95*ez(Math.min(1,(now-b.t0)/700)))*(b.k===undefined?1:b.k);
   /* fisika SI: gaya apung helium - berat - hambatan udara (kuadratik) + turbulensi lateral */
   const vx=b.v.x*BP.U,vy=b.v.y*BP.U,vz=b.v.z*BP.U,sp=Math.hypot(vx,vy,vz),dk=.5*BP.rho*BP.Cd*BP.A*sp/b.me,tt=now/1000,
    wx=BP.w*Math.sin(tt*b.wf+b.ph)+b.br,wz=BP.w*Math.cos(tt*b.wf*.83+b.ph*1.7);
@@ -825,7 +834,7 @@ function frame(now){
   b.g.updateMatrixWorld(true);_kn.set(0,-.56,0).applyMatrix4(b.g.matrixWorld);
   const a=b.l.geometry.attributes.position;a.setXYZ(0,_kn.x,_kn.y,_kn.z);a.setXYZ(1,b.ax,AY,b.az);a.needsUpdate=true;b.l.material.opacity=.8*(1-sk)*b.s});
  if(!free)place();R3.render(scene,cam);framed=true;
- if(state!=='curtain'&&state!=='menu')requestAnimationFrame(frame)}
+ if(state!=='curtain'&&state!=='menu')requestAnimationFrame(frame);else frame.on=0}
 requestAnimationFrame(frame);
 const BP={U:.35,g:9.81,rho:1.2,rhoHe:.166,Cd:.47,r:.14,w:.004};/* 1 unit = 0.35 m; balon lateks Ø28 cm berisi helium */
 BP.V=4/3*Math.PI*BP.r**3;BP.A=Math.PI*BP.r**2;
@@ -892,7 +901,7 @@ function buildScreen(){if(SCR)return;const vw=sc.clientWidth,vh=sc.clientHeight,
   const gd=new THREE.Mesh(new THREE.BoxGeometry(UW,4*up,.16),[flat(0x9a7420),flat(0x9a7420),flat(0xf3d27a),flat(0x7a5a18),flat(0xe5b84b),flat(0xb8902f)]);gd.position.set(0,h/2-(BH-2)*up,zf+.07);SCRg.add(gd)}
  SCRg.traverse(o=>{o.frustumCulled=false});SCRg.userData={vw,vh};SCR=SCRg;SCR.position.set(0,YF,ZF-SD);scene.add(SCR)}
 /* kamera turun: posisi (sumbu Y) + rotasi pandangan berjalan bersamaan, tanpa cut */
-function descend(){free=true;const P0=cam.position.clone(),q0=cam.quaternion.clone(),P1=new THREE.Vector3(0,YF,ZF),q1=new THREE.Quaternion();
+function descend(){free=true;const P0=cam.position.clone(),q0=cam.quaternion.clone(),P1=new THREE.Vector3(0,YF,ZF),q1=new THREE.Quaternion();DESC0={P:P0,q:q0};
  return anim(6500,k=>{const eP=k<.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2,eR=k*k*k*(k*(6*k-15)+10);
   cam.position.lerpVectors(P0,P1,eP);cam.quaternion.copy(q0).slerp(q1,eR);if(SCR)SCR.scale.z=Math.max(.001,1-eR*eR*(3-2*eR))})}
 /* tiket 3D di dalam kotak */
@@ -980,11 +989,27 @@ async function flyTicket(){const w=sc.clientWidth,h=sc.clientHeight,fc=h*.5,px=M
  tkCol=false}
 async function openGift(){state='busy';ensureMusic();$('hint').textContent='';await buildTk();
  th=((th+Math.PI)%(2*Math.PI)+2*Math.PI)%(2*Math.PI)-Math.PI;
- tg={t0:performance.now(),f:[th,ph,zm],t:[.55,.5,Math.min(1,D0()*.3153/5.6)]};await sleep(1300);
- lidT0=performance.now();SFX.full.whoosh(.7);await sleep(1000);confetti(...scr(0,H+.2,0));SFX.full.pop();balloons();await sleep(700);SFX.full.whoosh(.5);await flyTicket();state='ticket';type($('hint'),'Seret tiket untuk merobeknya',50)}
+ GP0=[th,ph,zm];tg={t0:performance.now(),f:[th,ph,zm],t:[.55,.5,Math.min(1,D0()*.3153/5.6)]};await sleep(1300);
+ lidT0=performance.now();SFX.full.whoosh(.7);await sleep(1000);confetti(...scr(0,H+.2,0));SFX.full.pop();balloons();await sleep(700);SFX.full.whoosh(.5);await flyTicket();state='ticket';NAV.add('ticket',giftBack);type($('hint'),'Seret tiket untuk merobeknya',50)}
+/* back dari 'ticket' -> kebalikan openGift: tiket terbang kembali ke kotak (Bezier e 1->0), balon memudar & dibuang, tutup kado menutup, kamera kembali ke pose awal */
+async function giftBack(){
+ if(state==='busy'){GBQ=true;return}   /* sedang animasi: antrekan (dijalankan saat state kembali 'ticket') */
+ if(state!=='ticket'||!TK||!GP0)return;
+ state='busy';GBQ=false;tkD=null;tkSpr=false;const k=RM?.45:1,hn=$('hint');TYG++;await sleep(100);hn.textContent='';tearPose(0);
+ const P1=TK.position.clone(),P0l=new THREE.Vector3(0,.95,-.15),Pcl=new THREE.Vector3(0,H+1.7,.1),qL=new THREE.Quaternion().setFromEuler(new THREE.Euler(-.45,.25,0)),gq=new THREE.Quaternion(),q0=new THREE.Quaternion(),a=new THREE.Vector3(),b=new THREE.Vector3();
+ tkCol=true;tkPrev=null;SFX.full.whoosh(.5);
+ const fly=anim(4200*k,u=>{const e=.5-.5*Math.cos(Math.PI*(1-u)),v=1-e;a.copy(P0l);gift.localToWorld(a);b.copy(Pcl);gift.localToWorld(b);
+  TK.position.set(v*v*a.x+2*v*e*b.x+e*e*P1.x,v*v*a.y+2*v*e*b.y+e*e*P1.y,v*v*a.z+2*v*e*b.z+e*e*P1.z);gift.getWorldQuaternion(gq);q0.copy(gq).multiply(qL);TK.quaternion.copy(q0).slerp(cam.quaternion,e)}),
+  bf=anim(1500*k,u=>{B.forEach(x=>x.k=1-u)});
+ await Promise.all([fly,bf]);tkCol=false;tkPrev=null;
+ B.forEach(x=>{scene.remove(x.g,x.l);x.g.traverse(o=>{if(o.geometry)o.geometry.dispose()});if(x.g.children[0])x.g.children[0].material.dispose();x.l.geometry.dispose();x.l.material.dispose()});B.length=0;
+ gift.attach(TK);TK.position.set(0,.95,-.15);TK.rotation.set(-.45,.25,0);TK.scale.set(1,1,1);
+ lidC0=performance.now();SFX.full.whoosh(.7);await sleep(1900*k);lid.rotation.x=0;lidC0=0;lidT0=0;
+ tg={t0:performance.now(),f:[th,ph,zm],t:GP0.slice()};await sleep(1300*k);
+ pts.clear();moved=0;tg=null;th=GP0[0];ph=GP0[1];zm=GP0[2];state='idle';FFW=false;type($('hint'),'Putar kadonya, lalu ketuk untuk membuka',45)}
 /* ---- sobek tiket dengan seret: progres = jarak seret / 30% lebar layar; lepas >=60% -> lanjut tearTicket dari pose saat itu ---- */
 const vib=p=>{try{navigator.vibrate&&navigator.vibrate(p)}catch(e){}},TKD=.4;/* TKD: porsi gerak sobek (0..1) yang dicapai saat progres seret 100% */
-let tkD=null,tkLast=0,tkSpr=false;
+let tkD=null,tkLast=0,tkSpr=false,GBQ=false;
 /* satu fungsi pose untuk seret & animasi sobek (rumus sama persis -> tanpa lonjakan) */
 function tearPose(k){const sp=STUB_REST,mp=MAIN_REST,e=k*k*(3-k)/2,u=1-e,
   cx=sp.x+.22,cy=sp.y+.04,cz=sp.z+.26,
@@ -997,7 +1022,7 @@ function tearPose(k){const sp=STUB_REST,mp=MAIN_REST,e=k*k*(3-k)/2,u=1-e,
 const tkOn=e=>{const r=sc.getBoundingClientRect(),rc=new THREE.Raycaster();rc.setFromCamera(new THREE.Vector2((e.clientX-r.left)/r.width*2-1,-((e.clientY-r.top)/r.height)*2+1),cam);return rc.intersectObject(TK,true).length>0};
 const tkProg=(dx,dy)=>Math.max(0,Math.min(1,(dx*.8+dy*.6)/(innerWidth*.3)));
 function tkDragPose(p){tearPose(p*TKD);if(!RM&&p>0){mainM.position.x+=(Math.random()-.5)*.012*p;mainM.position.y+=(Math.random()-.5)*.008*p}}
-async function tkBack(k0){state='busy';tkSpr=true;await anim(300,t=>tearPose(Math.abs(k0*(1-bk(t)))));tearPose(0);tkSpr=false;state='ticket'}
+async function tkBack(k0){state='busy';tkSpr=true;await anim(300,t=>tearPose(Math.abs(k0*(1-bk(t)))));tearPose(0);tkSpr=false;state='ticket';if(GBQ){GBQ=false;giftBack()}}
 sc.addEventListener('pointerdown',e=>{tkLast=0;if(state!=='ticket'||tkSpr||!TK)return;tkD={id:e.pointerId,x:e.clientX,y:e.clientY,hit:tkOn(e),mv:0,p:0,st:0};try{sc.setPointerCapture(e.pointerId)}catch(_){}});
 sc.addEventListener('pointermove',e=>{const d=tkD;if(!d||d.id!==e.pointerId||state!=='ticket')return;const dx=e.clientX-d.x,dy=e.clientY-d.y;d.mv=Math.max(d.mv,Math.hypot(dx,dy));
  if(!d.hit||d.mv<8)return;d.p=tkProg(dx,dy);tkDragPose(d.p);const st=Math.floor(d.p/.15);if(st>d.st)vib(8);d.st=st});
@@ -1013,7 +1038,24 @@ async function tearTicket(k0=0){if(state!=='ticket')return;state='busy';$('hint'
  const tp=anim(1700*(1-k0),k=>tearPose(k0+(1-k0)*k));tp.then(()=>vib([30,40,60]));
  await sleep(850);
  SFX.full.whoosh(1.6);await Promise.all([tp,descend()]);
- flatten();state='curtain';type($('curHint'),'Ketuk tirai untuk membukanya',50)}
+ flatten();state='curtain';if(GBQ){GBQ=false;NAV.add('ticket',giftBack)}NAV.add('curtain',curtBack);type($('curHint'),'Ketuk tirai untuk membukanya',50)}
+/* back dari 'curtain' -> kebalikan tearTicket: kamera naik (descend dibalik, easing sama dibalik) + tearPose 1->0 dengan tumpang tindih sama (tiket menyatu lagi di akhir) */
+async function curtBack(){
+ if(state==='busy'){TBQ=true;return}   /* sedang animasi: antrekan, dijalankan setelah state kembali 'curtain' */
+ if(state!=='curtain'||!TK||!DESC0)return;
+ state='busy';TBQ=false;tkD=null;tkSpr=true;const k=RM?.45:1,h=$('curHint'),Ps=DESC0.P,qs=DESC0.q,Pe=new THREE.Vector3(0,YF,ZF),qe=new THREE.Quaternion();
+ h.style.opacity=0;TYG++;
+ unflatPre();rs();R3.render(scene,cam);await new Promise(r=>requestAnimationFrame(r));unflatPost();   /* canvas sudah berisi pose akhir sebelum #cam disembunyikan -> tanpa frame kosong */
+ SFX.full.whoosh(1.6);if(!frame.on)requestAnimationFrame(frame);
+ const up=anim(6500*k,u=>{const t=1-u,eP=t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2,eR=t*t*t*(t*(6*t-15)+10);
+  cam.position.lerpVectors(Ps,Pe,eP);cam.quaternion.copy(qs).slerp(qe,eR);if(SCR)SCR.scale.z=Math.max(.001,1-eR*eR*(3-2*eR))});
+ await sleep(5650*k);
+ stubMats.forEach(m=>m.transparent=true);
+ await Promise.all([up,anim(1700*k,u=>tearPose(1-u))]);
+ tearPose(0);vib(20);if(SCR)SCR.visible=false;free=false;tkSpr=false;
+ h.textContent='';h.style.opacity='';state='ticket';FFW=false;
+ type($('hint'),'Seret tiket untuk merobeknya',50);if(GBQ){GBQ=false;giftBack()}}
+curtBackFn=curtBack;
 sc.addEventListener('click',e=>{if(state!=='ticket'||!TK||tkLast>=8)return;const r=sc.getBoundingClientRect(),rc=new THREE.Raycaster();
  rc.setFromCamera(new THREE.Vector2((e.clientX-r.left)/r.width*2-1,-((e.clientY-r.top)/r.height)*2+1),cam);if(rc.intersectObject(TK,true).length)tearTicket()});
 GL_OK=true;
@@ -1021,7 +1063,7 @@ GL_OK=true;
 /* ---- ticket tear -> curtain ---- */
 
 /* ---- tirai berlipit ---- */
-const CS=[];let cT0=0,CV=null,CX=null,CDS=1,CVW=0,CVH=0,TCV=null,LCV=null,SHG=null,CSW=0;
+const CS=[];let cT0=0,cC0=0,CV=null,CX=null,CDS=1,CVW=0,CVH=0,TCV=null,LCV=null,SHG=null,CSW=0;
 /* lebar kain tirai yang tersisa di tepi layar setelah terbuka (px) - kecil & proporsional dengan lebar layar */
 function EW(){return 0}
 function buildCurtains(){CS.length=0;const vw=innerWidth,E=EW(),ext=vw,cw=ext+vw*.6,N=Math.min(48,Math.max(12,Math.round(cw/26))),sw=cw/N,g=7,WF=sw*1.5+1,ds=Math.min(devicePixelRatio||1,2),vh=innerHeight,tw=Math.max(4,Math.round(sw*ds)),TC=fabricCanvas(tw,Math.round(vh*ds),{pitch:tw,n:1,top:42*ds,trim:4*ds}),tile=TC.toDataURL(),
@@ -1058,10 +1100,11 @@ function drawCurt(){if(!CX)return;const x=CX,ds=CDS,vw=CVW,vh=CVH,sw=CSW,W=sw*1.
 /* animasi tarik tirai: leader eased (cubic in-out 1.5s) + stagger dari sisi tarikan -> tiap lipatan dikejar pegas (tertinggal, overshoot kecil, mengendap);
    bawah tirai berayun (skewX+rotate) mengikuti kecepatan lewat pegas kedua yang redamannya rendah; lipatan merapat & menggelap saat menumpuk di tepi */
 const sm=(v,a,b)=>{v=Math.max(0,Math.min(1,(v-a)/(b-a)));return v*v*(3-2*v)};
-function curtLoop(now){const dt=Math.min(.033,Math.max(.001,(now-(curtLoop.t||now))/1000));curtLoop.t=now;let mv=false;
+function curtLoop(now){const dt=Math.min(.033,Math.max(.001,(now-(curtLoop.t||now))/1000));curtLoop.t=now;curtLoop.on=1;let mv=false;
  
  for(const c of CS){
-  if(cT0){let p=FFW?1:Math.max(0,Math.min(1,(now-cT0-c.del)/1500));p=p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;c.tx=c.x0+(c.x1-c.x0)*p}
+  if(cC0){const p=FFW?1:Math.max(0,Math.min(1,(now-cC0-(620-c.del))/1500)),q=1-p;c.tx=c.x0+(c.x1-c.x0)*(q<.5?4*q*q*q:1-Math.pow(-2*q+2,3)/2)}   /* tutup: kebalikan buka (easing sama dibalik, stagger dari sisi tengah) */
+  else if(cT0){let p=FFW?1:Math.max(0,Math.min(1,(now-cT0-c.del)/1500));p=p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;c.tx=c.x0+(c.x1-c.x0)*p}
   c.v+=(90*(c.tx-c.xx)-11*c.v)*dt;c.xx+=c.v*dt;
   const idle=cT0||RM?0:Math.sin(now/1500+c.ph)*.35;
   c.sv+=(40*(-c.v*(RM?.002:.007)+idle-c.sw)-2.6*c.sv)*dt;c.sw=Math.max(-6,Math.min(6,c.sw+c.sv*dt));
@@ -1070,8 +1113,11 @@ function curtLoop(now){const dt=Math.min(.033,Math.max(.001,(now-(curtLoop.t||no
   }
  drawCurt();
  
- if(!cT0||mv||now-cT0<5500)requestAnimationFrame(curtLoop)}
-function openCurtains(){cT0=performance.now();['cl','cr'].forEach(i=>$(i).style.pointerEvents='none')}
+ if(cC0&&(FFW||now-cC0>2150)&&!mv)curtDone();
+ if(!cT0||mv||cC0||now-cT0<5500)requestAnimationFrame(curtLoop);else curtLoop.on=0}
+function curtDone(){cC0=0;cT0=0;CS.forEach(c=>{c.xx=c.tx=c.x0;c.v=0;c.sw=c.sv=0});drawCurt()}
+function closeCurtains(){cC0=performance.now();if(!curtLoop.on)requestAnimationFrame(curtLoop)}
+function openCurtains(){cC0=0;cT0=performance.now();['cl','cr'].forEach(i=>$(i).style.pointerEvents='none')}
 buildCurtains();requestAnimationFrame(curtLoop);
 /* ======== PROYEKTOR BIOSKOP: layar perak berlubang, lampu meredup, leader hitung mundur ala film 35mm, grain/goresan/debu ======== */
 const SCN=$('scr'),SX=SCN.getContext('2d'),FL=$('film'),FX=FL.getContext('2d'),TT=$('title'),WDE=$('wdi');
@@ -1149,9 +1195,31 @@ const lsleep=ms=>new Promise(r=>{if(LD.skip)return r();const t=setTimeout(()=>{L
 function skipLeader(){if(LD.skip||SKM!=='leader')return;LD.skip=true;LD.tm.forEach(clearTimeout);LD.tm=[];SFX.stopAll();hideSkip();if(LD.rs)LD.rs()}
 /* pastikan satu kata leader tidak lebih lebar dari layar (font cadangan bisa lebih lebar dari Oswald) */
 function fitWd(){const WD=$('wd');WD.style.fontSize='';const mx=innerWidth-56,cs=getComputedStyle(WD),fs=parseFloat(cs.fontSize)||54,m=document.createElement('span');m.style.cssText='position:absolute;left:-9999px;top:0;visibility:hidden;white-space:nowrap;text-transform:uppercase;font-family:'+cs.fontFamily+';font-weight:'+cs.fontWeight+';font-size:'+fs+'px;letter-spacing:'+cs.letterSpacing;document.body.appendChild(m);let w=0;String(WDE.textContent).split(' ').forEach(x=>{m.textContent=x;w=Math.max(w,m.offsetWidth)});m.remove();if(w>mx)WD.style.fontSize=Math.max(18,Math.floor(fs*mx/w))+'px'}
-['cl','cr'].forEach(i=>$(i).addEventListener('click',async()=>{if(state!=='curtain')return;state='busy';ensureMusic();$('curHint').style.opacity=0;
+/* ===== back dari 'menu' -> kembali ke tahap tirai: tirai menutup (kebalikan buka), proyektor/lampu dikembalikan ===== */
+const CB={back:false,closing:false,reg:false};
+function menuBack(){CB.reg=false;if(CB.closing)return;
+ if(ENDON){ENDQ=true;return}   /* ending sedang keluar: antrekan */
+ if(state==='menu'){curtShut();return}
+ if(state==='busy'){CB.back=true;skipLeader()}}   /* leader jalan: hentikan (tanpa lanjut ke menu); tahap lain: diantrekan, ditangani di akhir handler klik */
+async function curtShut(){if(CB.closing)return;CB.closing=true;CB.back=false;CB.reg=false;state='busy';token++;
+ const mh=$('menuHint');$('menu').classList.remove('on');TT.classList.add('out');mh.classList.remove('on');mh.textContent='';credShow(false);hideSkip();
+ await sleep(RM?80:600);
+ SFX.hum(false);PJ.proj=false;PJ.pt=0;PJ.words=false;PJ.lo=null;PJ.mode='house';$('screen').classList.remove('pj');fadeHouse(.82,RM?300:1500);
+ $('s2').classList.remove('open');SFX.curtain();closeCurtains();
+ await sleep(2450);
+ for(let i=0;cC0&&i<100;i++)await new Promise(r=>setTimeout(r,50));
+ if(cC0)curtDone();
+ PJ.run=false;PJ.rp=null;PJ.flash=0;PJ.house=.82;PJ.mode='house';PJ.proj=false;
+ LD.skip=false;LD.tm.forEach(clearTimeout);LD.tm=[];LD.rs=null;hideSkip();
+ const WD=$('wd');WD.style.animation='';WD.style.fontSize='';WDE.textContent='';WD.classList.remove('ld','cr');
+ ['cl','cr'].forEach(i=>$(i).style.pointerEvents='');
+ const h=$('curHint');h.textContent='';h.style.opacity='';
+ state='curtain';CB.closing=false;FFW=false;type(h,'Ketuk tirai untuk membukanya',50);
+ if(TBQ&&curtBackFn){TBQ=false;curtBackFn()}}
+addEventListener('keydown',e=>{if(e.key==='Escape'&&['menu','curtain','ticket'].includes(NAV.top()))history.back()});
+['cl','cr'].forEach(i=>$(i).addEventListener('click',async()=>{if(state!=='curtain')return;state='busy';ensureMusic();CB.back=false;CB.reg=true;NAV.add('menu',menuBack);$('curHint').style.opacity=0;
   PJ.run=true;PJ.proj=false;PJ.mode='house';PJ.house=.82;
-  $('s2').classList.add('open');SFX.curtain();openCurtains();await sleep(2600);
+  $('s2').classList.add('open');SFX.curtain();openCurtains();await sleep(2600);if(CB.back){await curtShut();return}
   /* layar langsung tampil; proyektor menyala -> hitung mundur 5..1, beep di angka 2 */
   $('screen').classList.add('pj');PJ.proj=true;SFX.hum(true);LD.skip=false;LD.tm=[1,2,3,4,5].map(n=>setTimeout(()=>{SFX.tick();if(n===4)beep(880,.12,.06)},n*1000));PJ.pt=performance.now();PJ.mode='leader';PJ.t1=performance.now();PJ.t0=PJ.t1+1000;fadeHouse(.22,1000);
   showSkip('leader');
@@ -1169,7 +1237,8 @@ function fitWd(){const WD=$('wd');WD.style.fontSize='';const mx=innerWidth-56,cs
   if(sk&&!PJ.words){PJ.words=true;PJ.wt=performance.now()}
   /* baru sekarang: leader memudar ke ruang gelap sambil lampu meredup, jeda sebentar, lalu judul & menu muncul bertahap (dilewati: versi singkat) */
   PJ.lo={t0:performance.now(),d:sk?450:1100};fadeHouse(0,sk?600:1600);await sleep(sk?650:1700);PJ.mode='black';PJ.lo=null;SFX.hum(false);await sleep(sk?150:450);
-  state='menu';enterMain()}));
+  if(CB.back){await curtShut();return}
+  state='menu';if(SEEN.size>=4&&!ENDON)credShow(true);enterMain()}));
 /* ======== tata letak responsif: judul & menu dihitung ulang agar muat & tidak saling tindih di HP / tablet / PC ======== */
 const MEAS=document.createElement('div');MEAS.style.cssText='position:absolute;left:-9999px;top:0;visibility:hidden;text-align:center;font:700 20px/1.2 Cinzel,\'Trajan Pro\',\'Times New Roman\',serif;letter-spacing:.06em;text-transform:uppercase;overflow-wrap:normal';document.body.appendChild(MEAS);
 /* judul: bagian dari nama ke belakang (mis. "Ci Vani 🎂") di baris sendiri, lebih besar & emas; off = posisi (code point) potongan di judul penuh */
@@ -1196,7 +1265,21 @@ fitUI();if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fitUI)
 /* ---- panels ---- */
 let cur=null;
 const MHINT={gone:false};
-function show(id){SFX.full.click();cur=id;PJ.hold=true;token++;SFX.stopAll();if(!MHINT.gone){MHINT.gone=true;const mh=$('menuHint');mh.classList.remove('on','cur');mh.textContent=''}$('menu').classList.remove('on');TT.classList.add('out');const tk=token,d=fxPlay(id),go=()=>{if(tk!==token||cur!==id)return;$(id).classList.add('on');if(!RM)SFX.enter(id);({p1:p1,p2:p2,p3:p3,p4:p4})[id](tk)};document.body.classList.remove('qk');PT=performance.now();PEND=null;if(d){fxSfx(id);SFX.fxIn(id);PEND={go,tm:setTimeout(()=>{PEND=null;go()},d)}}else go()}
+/* ===== tombol back / swipe HP: menutup lapisan teratas (panel, foto, lilin, tiket, layar akhir), bukan keluar dari web ===== */
+const NAV=(()=>{const S=[];let q=[],wait=0,wt=0,H=0;
+ try{const st=history.state;if(st&&st.nav>0)history.replaceState({nav:0},'')}catch(e){}   /* setelah reload: entri sisa dianggap dasar */
+ function run(){while(q.length&&!wait){const o=q.shift();
+  if(o.k==='push'){try{history.pushState({nav:++H},'')}catch(e){}}
+  else{const k=Math.min(o.k,H);if(k<=0)continue;H-=k;wait=1;wt=setTimeout(()=>{wait=0;run()},500);try{history.go(-k)}catch(e){wait=0;clearTimeout(wt)}}}}
+ function add(n,fn){if(S.some(x=>x.n===n))return;S.push({n,fn});q.push({k:'push'});run()}
+ function rm(n){const i=S.findIndex(x=>x.n===n);if(i<0)return;const k=S.length-i;S.splice(i);q.push({k});run()}
+ addEventListener('popstate',e=>{
+  if(wait){wait=0;clearTimeout(wt);run();return}   /* popstate dari history.go() milik kita */
+  const d=(e.state&&e.state.nav)||0;H=d;
+  if(d>S.length){try{history.back()}catch(x){}return}   /* tombol maju / entri sisa: kembalikan */
+  while(S.length>d){const l=S.pop();try{l.fn()}catch(x){}}});
+ return{add,rm,top:()=>S.length?S[S.length-1].n:null}})();
+function show(id){SFX.full.click();cur=id;NAV.add('p',hide);PJ.hold=true;token++;SFX.stopAll();if(!MHINT.gone){MHINT.gone=true;const mh=$('menuHint');mh.classList.remove('on','cur');mh.textContent=''}$('menu').classList.remove('on');TT.classList.add('out');const tk=token,d=fxPlay(id),go=()=>{if(tk!==token||cur!==id)return;$(id).classList.add('on');if(!RM)SFX.enter(id);({p1:p1,p2:p2,p3:p3,p4:p4})[id](tk)};document.body.classList.remove('qk');PT=performance.now();PEND=null;if(d){fxSfx(id);SFX.fxIn(id);PEND={go,tm:setTimeout(()=>{PEND=null;go()},d)}}else go()}
 /* ---- transisi sinematik per fitur: p2 light leak, p1 film wipe, p3 letterbox, p4 iris ---- */
 const CFX=$('fx'),CFXM={p2:{k:'flare',tc:480,ms:1500},p1:{k:'film',tc:680,ms:1500},p3:{k:'bars',tc:600,ms:1900},p4:{k:'iris',tc:450,ms:1900}};let fxT=0;
 function fxPlay(id){const m=CFXM[id];if(!m||RM)return 0;const n=++fxT;CFX.className='';void CFX.offsetWidth;CFX.dataset.k=m.k;CFX.className='run go';if(m.k==='iris')fxIris(n);setTimeout(()=>{if(n===fxT)CFX.className=''},m.ms+80);return m.tc}
@@ -1229,11 +1312,11 @@ function skipDo(m){
 document.addEventListener('pointerdown',e=>{ARM=skipStage(e.target)},true);
 document.addEventListener('click',e=>{if(!ARM)return;ARM=null;const m=skipStage(e.target);e.stopPropagation();e.preventDefault();if(m)skipDo(m)},true);
 setInterval(()=>{if(FFW&&(SKM||state==='ticket'||state==='curtain'||(state==='menu'&&!ENDON)))FFW=false},80);
-const SEEN=new Set();let END_AUTO=false,ENDON=false,ENDT=0,TITLE_CF=false;
+const SEEN=new Set();let END_AUTO=false,ENDON=false,ENDT=0,TITLE_CF=false,END_CL=false,ENDQ=false;   /* END_CL: animasi keluar ending berjalan; ENDQ: back menu diantrekan sampai keluar selesai */
 function seenMark(id){SEEN.add(id);const b=document.querySelector('#menu button[data-p="'+id+'"]');if(b)b.classList.add('seen');if(SEEN.size>=4&&!ENDON)credShow(true)}
 function credShow(on){$('credLink').classList.toggle('on',on);$('credHint').classList.toggle('on',on)}
-function hide(){SFX.full.click();token++;SFX.stopAll();fxStop();pcStop();cdReset();if(cur){seenMark(cur);$(cur).classList.remove('on')}cur=null;
- setTimeout(async()=>{if(ENDON||cur)return;PJ.hold=false;const t0=token;await enterMain();if(token!==t0||ENDON||END_AUTO||SEEN.size<4||cur)return;await sleep(1500);if(token!==t0||ENDON||cur)return;END_AUTO=true;startEnding()},900)}
+function hide(){NAV.rm('p');SFX.full.click();token++;SFX.stopAll();fxStop();pcStop();cdReset();if(cur){seenMark(cur);$(cur).classList.remove('on')}cur=null;
+ setTimeout(async()=>{if(ENDON||cur||state!=='menu')return;PJ.hold=false;const t0=token;await enterMain();if(token!==t0||ENDON||END_AUTO||SEEN.size<4||cur)return;await sleep(1500);if(token!==t0||ENDON||cur)return;END_AUTO=true;startEnding()},900)}
 /* urutan layar utama: menu fade-in dulu, lalu kalimat diketik dengan laju baca (~14 huruf/detik) */
 /* rencana ketikan manusia: kecepatan acak, jeda di spasi/huruf besar, sesekali berhenti mikir, sekali salah ketik lalu dihapus */
 function reserve(el,text){el.style.minHeight='';el.textContent=text;el.style.minHeight=el.offsetHeight+'px';el.textContent=''}
@@ -1305,7 +1388,7 @@ function startRoll(ok){const C=$('endCred'),R=$('endRoll'),h=C.clientHeight;let 
  let last=performance.now();(function f(n){if(!ok()||done)return;const dt=Math.min(.05,(n-last)/1000);last=n;
   if(!user){acc=Math.max(acc,C.scrollTop)+(40*(parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--u'))||1))*dt;C.scrollTop=acc;if(acc>=stopY()||C.scrollTop+C.clientHeight>=C.scrollHeight-2){fin();return}}
   requestAnimationFrame(f)})(last)}
-async function startEnding(){if(ENDON||cur)return;ENDON=true;PJ.hold=true;const et=++ENDT,ok=()=>ENDON&&et===ENDT,E=$('end'),I=$('endIris');token++;SFX.stopAll();
+async function startEnding(){if(ENDON||cur)return;ENDON=true;NAV.add('end',closeEnding);PJ.hold=true;const et=++ENDT,ok=()=>ENDON&&et===ENDT,E=$('end'),I=$('endIris');token++;SFX.stopAll();
  credShow(false);$('menu').classList.remove('on');TT.classList.add('out');
  musicSlow=true;SFX.music(true,true);buildCredits();
  I.classList.remove('rm','on');I.style.removeProperty('--r');$('endThe').classList.remove('on');$('endCred').classList.remove('on');
@@ -1317,9 +1400,22 @@ async function startEnding(){if(ENDON||cur)return;ENDON=true;PJ.hold=true;const 
  if(RM){I.classList.add('rm');void I.offsetWidth;I.classList.add('on');await sleep(1000)}else await irisClose(1600,ok);
  if(!ok())return;$('endThe').classList.remove('on');await sleep(400);if(!ok())return;
  $('endCred').classList.add('on');showSkip('credits');startRoll(ok)}
-function closeEnding(){if(!ENDON)return;ENDON=false;PJ.hold=false;ENDT++;SFX.stopAll();tkCleanup(true);csStop();const E=$('end');SFX.full.click();hideSkip();ROLL=null;
- E.classList.remove('dim','on');['endThe','endCred','endX'].forEach(i=>$(i).classList.remove('on'));EB.classList.remove('on');
- const I=$('endIris');I.classList.remove('rm','on');I.style.removeProperty('--r');
+/* kebalikan irisClose: radius dari tutup (atau posisi sekarang r0) ke terbuka, easing smoothstep yang sama dibalik */
+function irisOpen(ms,r0){return new Promise(res=>{const I=$('endIris'),R0=Math.hypot(innerWidth,innerHeight)/2*1.05,t0=performance.now(),s0=Math.max(0,r0||0)/R0;
+ (function f(n){const k=FFW?1:Math.min(1,(n-t0)/ms),e=k*k*(3-2*k);I.style.setProperty('--r',(R0*Math.min(1,s0+(1-s0)*e)).toFixed(1)+'px');if(k<1)requestAnimationFrame(f);else{I.style.removeProperty('--r');res()}})(t0)})}
+/* keluar ending (back / Esc / ✕ / Kembali ke Menu): kebalikan masuk. Gulir credits berhenti di tempat (loop mati lewat ENDT), credits memudar, iris membuka, THE END & redup memudar, lalu menu. Berlaku di semua fase. */
+async function closeEnding(){if(!ENDON||END_CL)return;END_CL=true;NAV.rm('end');const et=++ENDT,E=$('end'),I=$('endIris'),The=$('endThe'),Cr=$('endCred');
+ SFX.stopAll();tkCleanup(true);csStop();SFX.full.click();hideSkip();ROLL=null;
+ const wasCred=Cr.classList.contains('on'),rv=I.style.getPropertyValue('--r');
+ EB.classList.remove('on');$('endX').classList.remove('on');Cr.classList.remove('on');
+ if(wasCred)await sleep(RM?300:1000);
+ if(RM){I.classList.remove('on');The.classList.remove('on');E.classList.remove('dim');await sleep(300)}
+ else{
+  if(rv!==''){if(!The.classList.contains('on')){The.classList.add('on');await sleep(400)}await irisOpen(1600,parseFloat(rv))}
+  The.classList.remove('on');E.classList.remove('dim');await sleep(1100)}
+ E.classList.remove('on');I.classList.remove('rm','on');I.style.removeProperty('--r');
+ ENDON=false;END_CL=false;PJ.hold=false;ENDT++;FFW=false;
+ if(ENDQ){ENDQ=false;menuBack();return}
  musicSlow=false;SFX.music(true,false);if(SEEN.size>=4)credShow(true);enterMain()}
 /* ---- Simpan Tiket: tiket PNG 2D off-screen (terpisah dari tekstur 3D) ---- */
 const TK_LABEL='🎟️ Simpan Tiket';let TK_P=null,TK_BUSY=false,TK_URL=null,TK_TIMER=0,TK_OV=null,TK_FOCUS=null;
@@ -1367,10 +1463,10 @@ function tkInit(){const b=$('endSave');if(!b)return;b.style.display=CONFIG.TIKET
  if(CONFIG.TIKET_SIMPAN&&!TK_P){const t=ENDT;TK_P=renderTicketPNG().catch(()=>{if(t===ENDT)TK_P=null;return null})}}
 function tkCleanup(keep){clearTimeout(TK_TIMER);TK_TIMER=0;tkCloseOv(true);if(TK_URL){URL.revokeObjectURL(TK_URL);TK_URL=null}
  TK_BUSY=false;const b=$('endSave');if(b){b.textContent=TK_LABEL;b.removeAttribute('aria-busy')}if(!keep)TK_P=null}
-function tkCloseOv(quiet){if(!TK_OV)return;const o=TK_OV,u=o.querySelector('img').src;TK_OV=null;o.remove();URL.revokeObjectURL(u);if(!quiet){SFX.full.click();const f=TK_FOCUS;TK_FOCUS=null;if(f&&f.focus)try{f.focus()}catch(e){}}}
+function tkCloseOv(quiet){if(!TK_OV)return;NAV.rm('tk');const o=TK_OV,u=o.querySelector('img').src;TK_OV=null;if(quiet||RM){o.remove();URL.revokeObjectURL(u)}else{o.classList.remove('on');o.style.pointerEvents='none';setTimeout(()=>{o.remove();URL.revokeObjectURL(u)},380)}if(!quiet){SFX.full.click();const f=TK_FOCUS;TK_FOCUS=null;if(f&&f.focus)try{f.focus()}catch(e){}}}
 function tkShowOv(blob){tkCloseOv(true);TK_FOCUS=document.activeElement;const o=document.createElement('div');o.id='tkOv';o.setAttribute('role','dialog');o.setAttribute('aria-modal','true');o.setAttribute('aria-label','Tiket');
  const im=new Image();im.alt='Tiket ulang tahun';im.src=URL.createObjectURL(blob);const p=document.createElement('p');p.textContent='Tahan lama gambar, lalu pilih Simpan ke Foto';
- const cb=document.createElement('button');cb.type='button';cb.textContent='Tutup';cb.onclick=()=>tkCloseOv();o.append(im,p,cb);document.body.appendChild(o);TK_OV=o;cb.focus()}
+ const cb=document.createElement('button');cb.type='button';cb.textContent='Tutup';cb.onclick=()=>tkCloseOv();o.append(im,p,cb);document.body.appendChild(o);TK_OV=o;void o.offsetWidth;o.classList.add('on');NAV.add('tk',()=>tkCloseOv());cb.focus()}
 addEventListener('keydown',e=>{if(e.key==='Escape'&&TK_OV){e.stopImmediatePropagation();tkCloseOv()}},true);
 function tkDownloadBlocked(){const ua=navigator.userAgent||'';return /iP(hone|ad|od)/.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)||/FBAN|FBAV|FB_IAB|Instagram|WhatsApp|Line\/|MicroMessenger|Snapchat|TikTok|musical_ly/i.test(ua)||!('download' in HTMLAnchorElement.prototype)}
 function tkDone(b){SFX.full.chime();const r=b.getBoundingClientRect();confetti(r.left+r.width/2,r.top+r.height/2,40);b.textContent='✓ Tersimpan';clearTimeout(TK_TIMER);TK_TIMER=setTimeout(()=>{TK_TIMER=0;b.textContent=TK_LABEL},2000)}
@@ -1414,9 +1510,12 @@ const cdVib=v=>{try{if(navigator.vibrate)navigator.vibrate(v)}catch(e){}};
 function cdLit(){SFX.blow(false);CD.p=0;CD.done=false;CD.hold=false;CD.c.forEach(c=>c.classList.remove('off'));CD.sm.forEach(h=>{clearTimeout(h.t);h.s.remove()});CD.sm.clear();const o=$('cdl');o.classList.remove('blow','fin');o.style.setProperty('--sw',4);$('cdlTxt').textContent=CD_TXT}
 function cdStopLoop(){cancelAnimationFrame(CD.raf);CD.raf=0}
 function cdBtnShow(){if(CONFIG.LILIN)$('cdBtn').classList.add('in')}
-function cdClose(quiet){const was=CD.open;CD.open=false;cdStopLoop();cdLit();$('cdl').classList.remove('on');$('p2').classList.remove('cdl-open');if(was&&!quiet){const f=CD.foc;CD.foc=null;if(f&&f.focus)try{f.focus()}catch(e){}}}
+function cdClose(quiet){NAV.rm('cd');const was=CD.open;CD.open=false;cdStopLoop();clearTimeout(CD.lt);
+ if(was&&!quiet){SFX.blow(false);CD.hold=false;$('cdl').classList.remove('blow','on');CD.lt=setTimeout(cdLit,380)}   /* animasi keluar: reset kue/teks setelah fade selesai (dibatalkan bila dibuka lagi) */
+ else{cdLit();$('cdl').classList.remove('on')}
+ $('p2').classList.remove('cdl-open');if(was&&!quiet){const f=CD.foc;CD.foc=null;if(f&&f.focus)try{f.focus()}catch(e){}}}
 function cdReset(){cdClose(true);$('cdBtn').classList.remove('in')}
-function cdOpen(){if(CD.open||!CONFIG.LILIN)return;SFX.full.click();CD.open=true;CD.tk=token;CD.foc=document.activeElement;cdLit();const p=$('p2'),o=$('cdl');p.scrollTop=0;p.classList.add('cdl-open');o.classList.add('on');try{o.focus({preventScroll:true})}catch(e){}}
+function cdOpen(){if(CD.open||!CONFIG.LILIN)return;SFX.full.click();CD.open=true;clearTimeout(CD.lt);NAV.add('cd',()=>cdClose());CD.tk=token;CD.foc=document.activeElement;cdLit();const p=$('p2'),o=$('cdl');p.scrollTop=0;p.classList.add('cdl-open');o.classList.add('on');try{o.focus({preventScroll:true})}catch(e){}}
 function cdSmoke(c){const s=document.createElement('i');s.className='sm';c.appendChild(s);const h={s,t:setTimeout(()=>{s.remove();CD.sm.delete(h)},1700)};CD.sm.add(h)}
 function cdOut(c){c.classList.add('off');if(SFX.hemat())SFX.puf();else SFX.whoosh(.5);cdVib(20);if(!RM)cdSmoke(c)}
 function cdDone(){CD.done=true;CD.hold=false;const o=$('cdl');o.classList.remove('blow');o.classList.add('fin');$('cdlTxt').textContent=CONFIG.LILIN_DOA||'Semoga semua harapanmu terkabul 🎂';SFX.blow(false);bigConfetti(innerWidth/2,innerHeight*.3,140,true);cdVib([30,40,30])}
@@ -1497,8 +1596,9 @@ for(let i=0;i<TOTAL;i++){const fi=i+1,f=document.createElement('figure');f.class
  f.onclick=e=>{if(rMoved||!im.naturalWidth)return;const now=performance.now();
   if(TAP&&TAP.f===f&&now-TAP.t<=280){clearTimeout(TAP.id);TAP=null;react(i,e.clientX,e.clientY);return}   /* ketukan kedua = reaksi ❤️ */
   if(TAP)clearTimeout(TAP.id);const tk=token;
-  TAP={f,t:now,id:setTimeout(()=>{TAP=null;if(rMoved||tk!==token||!$('p1').classList.contains('on'))return;lbI=i;LBI.src=im.src;LBC.textContent=c.textContent;lbPaint();LBX.classList.add('on')},280)}}}
-LBX.onclick=()=>{LBX.classList.remove('on');lbI=-1};
+  TAP={f,t:now,id:setTimeout(()=>{TAP=null;if(rMoved||tk!==token||!$('p1').classList.contains('on'))return;lbI=i;LBI.src=im.src;LBC.textContent=c.textContent;lbPaint();LBX.classList.add('on');NAV.add('lb',()=>{LBX.classList.remove('on');lbI=-1})},280)}}}
+LBX.onclick=()=>{NAV.rm('lb');LBX.classList.remove('on');lbI=-1};
+addEventListener('keydown',e=>{if(e.key==='Escape'&&NAV.top()==='lb')history.back()});   /* Esc = back: hanya menutup lightbox (animasi keluar = transisi CSS .on dicabut; RM: tanpa scale via CSS) */
 $('lbh').onclick=e=>{e.stopPropagation();if(lbI<0)return;const r=e.currentTarget.getBoundingClientRect();react(lbI,r.left+r.width/2,r.top)};
 /* ---- navigasi reel: tiap pindah, foto berikutnya berhenti tepat di tengah dengan gerak easing yang halus ---- */
 let rAnim=0,rTgt=null,rTick=false;
